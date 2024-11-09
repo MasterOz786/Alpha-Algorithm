@@ -66,5 +66,6 @@ response = model.generate_content(
     )                              
 )
 
-responses.append(response.text)
-print([response for response in responses])
+# beautify the output
+import json
+print(json.dumps(json.loads(response.text), indent=1))
