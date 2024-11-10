@@ -1,5 +1,8 @@
 import google.generativeai as genai
 import typing_extensions as typing
+import networkx as nx
+import matplotlib.pyplot as plt
+
 from file_handler import extract_text_from_file
 
 # Configure the Generative AI model
@@ -69,3 +72,91 @@ response = model.generate_content(
 # beautify the output
 import json
 print(json.dumps(json.loads(response.text), indent=1))
+
+# Parse trace data
+trace_data = json.loads(response.text)
+
+def alpha_algorithm(traces):
+    # Define TL (transitions)
+    TL = set()
+    for trace in traces:
+        TL.update(trace["trace"])
+
+    # Define TI (initial transitions)
+    TI = set([trace["trace"][0] for trace in traces])
+
+    # Define TO (final transitions)
+    TO = set([trace["trace"][-1] for trace in traces])
+
+    # Define XL (flow relationships between transitions)
+    XL = set()
+    for trace in traces:
+        for i in range(len(trace["trace"]) - 1):
+            A = tuple([trace["trace"][i]])
+            B = tuple([trace["trace"][i + 1]])
+            if A != () and B != ():
+                XL.add((A, B))
+
+    # Define YL (reduced flow relations)
+    YL = set()
+    for A, B in XL:
+        if not any((set(A).issubset(set(C)) and set(B).issubset(set(D)) for C, D in XL if (C, D) != (A, B))):
+            YL.add((A, B))
+
+    # Define PL (places)
+    PL = set([f"p{i}" for i in range(len(YL))])
+    PL.add("iL")  # Initial place
+    PL.add("oL")  # Output place
+
+    # Define FL (flow relationships)
+    FL = set()
+    for i, (A, B) in enumerate(YL):
+        for a in A:
+            FL.add((a, f"p{i}"))
+        for b in B:
+            FL.add((f"p{i}", b))
+    for t in TI:
+        FL.add(("iL", t))  # Connect initial places to transitions
+    for t in TO:
+        FL.add((t, "oL"))  # Connect final transitions to output place
+
+    return PL, TL, FL, TI, TO
+
+# Get the Petri net components
+PL, TL, FL, TI, TO = alpha_algorithm(trace_data)
+
+# Print the components
+print("Places (PL):", PL)
+print("Transitions (TL):", TL)
+print("Flow relationships (FL):", FL)
+
+# Create a directed graph
+G = nx.DiGraph()
+
+# Add the transitions as nodes
+G.add_nodes_from(TL, type="transition")
+
+# Add the places as nodes
+G.add_nodes_from(PL, type="place")
+
+# Add the initial place and output place as nodes
+G.add_node("iL", type="place")
+G.add_node("oL", type="place")
+
+# Add the flow relationships as edges
+G.add_edges_from(FL)
+
+# Add the relationships from the initial place to the initial transitions
+G.add_edges_from([("iL", t) for t in TI])
+
+# Add the relationships from the final transitions to the output place
+G.add_edges_from([(t, "oL") for t in TO])
+
+# Draw the Petri net
+pos = nx.spring_layout(G)
+nx.draw(G, pos, with_labels=True)
+nx.draw_networkx_nodes(G, pos, nodelist=TL, node_color="lightblue")
+nx.draw_networkx_nodes(G, pos, nodelist=PL, node_color="lightgreen")
+nx.draw_networkx_nodes(G, pos, nodelist=["iL", "oL"], node_color="yellow")
+nx.draw_networkx_labels(G, pos, labels={n: n for n in G.nodes()})
+plt.show()
