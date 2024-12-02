@@ -1,18 +1,17 @@
+
 import google.generativeai as genai
-from file_handler import read_file_content
 import json
+from datetime import datetime
 from collections import Counter
-import matplotlib.pyplot as plt
-import networkx as nx
-from matplotlib.patches import FancyArrowPatch
+from graphviz import Digraph
+from file_handler import extract_text_from_file
 
 # Configure the Generative AI model
-genai.configure(api_key="AIzaSyBS-Y7NDy3dErTDszUFsHLOXxN8XX0X9d0")
+genai.configure(api_key="AIzaSyAUL1ydoXAa6de-0ks33CGMhfHuRU9mlfU")
 model = genai.GenerativeModel("gemini-1.5-flash")
 
 # Define the path to the file you want to read
-file_path = "H:/5th Semester/Process Mining/PM/Alpha-Algorithm/description1.txt"  # Customize the path as needed
-
+# file_path = "description1.txt"  # Customize the path as needed
 # User inputs
 num_traces = input("Enter the number of traces: ")
 amount_noise = input("Enter the amount of noise: ")
@@ -20,7 +19,7 @@ freq_uncommon_paths = input("Enter the frequency of uncommon paths: ")
 likelihood_missing_events = input("Enter the likelihood of missing events: ")
 
 # Read the process description from the specified file
-process_description = read_file_content(file_path)
+process_description = extract_text_from_file()
 
 # Prompts for the Generative AI model
 task1_prompt_output1 = f"""
@@ -32,8 +31,8 @@ task1_prompt_output1 = f"""
         likelihood of missing events: {likelihood_missing_events}
 
     Output 1:
-    A singular list of JSON objects that contains for each transition a label (A, B, etc.), a description (which transition is this), pre transitions (which transition comes right before this, like if the current transition is C and the transition immediately before it is B & A), and post transitions (like D). 
-    Keep the key named as event_log for consistency. Make sure that data format is as follows: {{"first_event_logs": [{{"trace": [{{"transition": "ABC", "description": "abc", "pre_transitions": ["A"], "post_transitions": ["B", "C"]}}]}}]
+    A singular list of JSON objects that contains for each transition a label (A, B, etc.), name (without a space), pre transitions (which transition comes right before this, like if the current transition is C and the transition immediately before it is B & A), and post transitions (like D). 
+    Keep the key named as event_log for consistency. Make sure that data format is as follows: {{"first_event_logs": [{{"trace": [{{"transition": "ABC", "name": "abc", "pre_transitions": ["A"], "post_transitions": ["B", "C"]}}]}}]
 """
 
 task1_prompt_output2 = f"""
@@ -57,7 +56,6 @@ task1_prompt_output2 = f"""
 
     Use the key second_event_logs as the container for the output. Ensure consistent formatting and valid sequences based on the transitions provided in the process description.
 """
-
 
 task1_prompt_output3 = """
     Output 3:
@@ -89,6 +87,11 @@ messages.append({
     "parts": [response.text]
 })
 responses.append(response.text)
+
+# make a letter and name dictionary
+activities = {}
+for t in json.loads(response.text)["first_event_logs"][0]["trace"]:
+    activities[t["transition"]] = t["name"]
 
 # Second user prompt for output 2
 messages.append({
@@ -132,6 +135,9 @@ for response in responses:
     if "second_event_logs" in response:
         for log in response["second_event_logs"]:
             expanded_logs.extend([", ".join(log["trace"])] * log["frequency"])
+    if "third_event_logs" in response:
+        for log in response["third_event_logs"]:
+            expanded_logs.extend([", ".join(log["trace"])] * log["frequency"])
 
 # STEP1: Display Final Log (L) with Correct Format
 print("STEP1: ")
@@ -139,6 +145,7 @@ print("-" * 50)
 print("Final Log (L)")
 print("-" * 50)
 print("{")
+
 # Step 1: Convert logs to unique traces with their frequencies
 unique_traces = Counter(expanded_logs)
 for trace, frequency in unique_traces.items():
@@ -169,10 +176,6 @@ print("Unique Events (TL):", all_events)
 print("Initial Events (TI):", TI)
 print("Final Events (TO):", TO)
 print("-" * 50)
-
-
-
-
 
 # Step 3: Determining Relationships (Causal, Parallel, Choice)
 print("\nSTEP3: Determining Relationships")
@@ -236,12 +239,6 @@ for event, related_events in choice_relationships.items():
 
 print("-" * 50)
 
-
-
-
-
-
-
 # Step 4: Footprint Matrix
 print("\nSTEP4: Footprint Matrix")
 print("-" * 50)
@@ -266,7 +263,7 @@ for event1 in sorted(all_events):
                 footprint_matrix[event1][event2] = "||"
             elif event2 in choice_relationships.get(event1, []):
                 footprint_matrix[event1][event2] = "#"
-        else:  # Self-relationship is a choice
+        else:  # -relationship is a choice
             footprint_matrix[event1][event2] = "#"
 
 # Display the Footprint Matrix with vertical dash lines to separate columns
@@ -283,9 +280,6 @@ for event1 in sorted(all_events):
         print(f" {footprint_matrix[event1][event2]} |", end="")  # Add '|' after each matrix cell
     print()  # Move to the next line after each row
     print("-" * 50)  # Row separator
-    
-
-
 
 # Step 5: Generate Pair Sets of Causal Relationships Only
 print("\nSTEP5: Causal Pair Sets")
@@ -301,7 +295,6 @@ for event, related_events in causal_relationships.items():
 for pair in causal_pairs:
     print(pair)
 print("-" * 50)
-
 
 # Step 6: Displaying Maximal Relationship Pairs
 print("\nSTEP6: Maximal Relationship Pairs")
@@ -327,9 +320,6 @@ for pair in all_causal_pairs:
     print(pair)
 print("-" * 50)
 
-
-
-
 # Step 7: Place Set (PL) for Maximal Causal Pairs
 print("\nSTEP7: Place Set (PL) Maximal Causal Pairs")
 print("-" * 50)
@@ -351,9 +341,6 @@ for place_set in non_maximal_pairs:
     print(place_set)
 
 print("-" * 50)
-
-
-
 
 # Step 8: Flow Relation for Maximal Causal Pairs
 print("\nSTEP8: Flow Relation for Maximal Causal Pairs")
@@ -383,8 +370,6 @@ for relation in flow_relations:
 
 print("-" * 50)
 
-
-
 # Step 9: Extract Transitions, Places, and Flow Relations
 print("\nSTEP9: Extract Transitions, Places, and Flow Relations")
 print("-" * 50)
@@ -400,71 +385,211 @@ print("\nPlaces:")
 for place in places:
     print(place)
 
-# Reusing flow relations from Step 8
+# Flow relation extraction: These are the Flow Relations generated in Step 8
 print("\nFlow Relations:")
-for flow in flow_relations:
-    print(flow)
-
-print("-" * 50)
-
-
+for relation in flow_relations:
+    print(relation)
 
 # Step 10: Visualize Petri Net
+# Side Step: Convert the Flow Relations for compatibility with Graphviz Code
+flow_relations_format_prompt = f"""
+    Output should be a single json object with a key 'flow_relations' and the value as the converted format.
+    Only give the output in the array of arrays format and each array should contain 2 elements. Each element should only be a string and not encloded in parenthesis or brackets or anything else. They should be singular characters to represent the flow relations. Make sure no additional flow relation is added. Also make sure that the given flow relations are accurately converted in the format specified.
+
+    Convert the flow relations {flow_relations}.
+    Example:
+    {{"flow_relations": [[source, dest], [source, dest]]}}
+    
+"""
+
+messages.append({
+    "role": "user",
+    "parts": [flow_relations_format_prompt]
+})
+
+# Generate the response for the flow relations
+response = model.generate_content(
+    messages, 
+    generation_config=genai.GenerationConfig(
+        response_mime_type="application/json"
+    )                              
+)
+messages.append({
+    "role": "model", 
+    "parts": [response.text]
+    })
+responses.append(response.text)
+flow_relations = json.loads(response.text)['flow_relations']
+
+markings_places_format_prompt = f"""
+    Only give the output in the array of arrays format and each array should contain 2 elements. Each element should only be a string and not encloded in parenthesis or brackets or anything else. They should be singular characters to represent the places. Make sure no additional flow relation is added. Also make sure that the given places are accurately converted in the format specified. Output should be a single json object with a key 'places' and the value as the converted format.
+
+    Convert the places {places}.
+    Example:
+    {{"places": [[A, B], [B, C]]}}
+
+    Also add key for initial_markings and final_markings.
+"""
+
+messages.append({
+    "role": "user",
+    "parts": [markings_places_format_prompt]
+})
+
+# Generate the response for the places
+response = model.generate_content(
+    messages, 
+    generation_config=genai.GenerationConfig(
+        response_mime_type="application/json"
+    )                              
+)
+
+messages.append({
+    "role": "model", 
+    "parts": [response.text]
+})
+
+responses.append(response.text)
+markings_places = json.loads(response.text)
+
+styles = {
+    'transition': {
+        'shape': 'rectangle',
+        'style': 'filled',
+        'fillcolor': 'lightgreen',
+        'height': '0.6',
+        'width': '1.2',
+        'fontname': 'Arial'
+    },
+    'place': {
+        'shape': 'circle',
+        'style': 'filled',
+        'fillcolor': 'lightblue',
+        'height': '0.6',
+        'width': '0.6',
+        'fontname': 'Arial'
+    },
+    'initial_place': {
+        'shape': 'circle',
+        'style': 'filled',
+        'fillcolor': 'lightgray',
+        'height': '0.6',
+        'width': '0.6',
+        'peripheries': '2',
+        'fontname': 'Arial'
+    },
+    'final_place': {
+        'shape': 'circle',
+        'style': 'filled',
+        'fillcolor': 'lightpink',
+        'height': '0.6',
+        'width': '0.6',
+        'peripheries': '2',
+        'fontname': 'Arial'
+    }
+}
+
 print("\nSTEP10: Visualize Petri Net")
 print("-" * 50)
 
-# Create the graph for Petri Net visualization
-G = nx.DiGraph()
+petri_net = {
+    "places": markings_places['places'],
+    "transitions": transitions,
+    "initial_markings": markings_places['initial_markings'],
+    "final_markings": markings_places['final_markings'],
+    "flow_relations": flow_relations
+}
 
-# Define transitions and places as you already did
-transitions = list(all_events)  # transitions (events)
-places = []  # will store places as (pre, post) pairs
-for event1 in all_events:
-    for event2 in all_events:
-        if event1 != event2 and event2 in causal_relationships.get(event1, []):
-            places.append((event1, event2))  # Place between event1 and event2
+""" Replace letters with actual activity names """
+# for i, place in enumerate(petri_net['places']):
+#     petri_net['places'][i] = [activities[p] for p in place]
 
-# Add transitions and places to the graph
-for transition in transitions:
-    G.add_node(transition, shape='rectangle')
+# for i, t in enumerate(petri_net['transitions']):
+#     petri_net['transitions'][i] = activities[t]
 
-for place in places:
-    place_name = f"P({{{place[0]}}}, {{{place[1]}}})"
-    G.add_node(place_name, shape='circle')
+# for i, m in enumerate(petri_net['initial_markings']):
+#     petri_net['initial_markings'][i] = activities[m]
 
-# Add edges between places and transitions
-for event1 in all_events:
-    for event2 in all_events:
-        if event1 != event2 and event2 in causal_relationships.get(event1, []):
-            place_name = f"P({{{event1}}}, {{{event2}}})"
-            G.add_edge(event1, place_name)
-            G.add_edge(place_name, event2)
+# for i, m in enumerate(petri_net['final_markings']):
+#     petri_net['final_markings'][i] = activities[m]
 
-# Generate positions for the nodes using a spring layout
-pos = nx.spring_layout(G, seed=42)
+# for i, f in enumerate(petri_net['flow_relations']):
+#     print(i, f)
+#     # petri_net['flow_relations'][i] = [activities[f[0]], activities[f[1]]]
 
-# Draw the Petri Net with custom node shapes and labels
-plt.figure(figsize=(10, 8))
 
-# Draw transitions (rectangles)
-transition_nodes = [node for node in G.nodes if G.nodes[node]['shape'] == 'rectangle']
-nx.draw_networkx_nodes(G, pos, nodelist=transition_nodes, node_shape='s', node_color='skyblue', node_size=2000, label="Transitions")
 
-# Draw places (circles)
-place_nodes = [node for node in G.nodes if G.nodes[node]['shape'] == 'circle']
-nx.draw_networkx_nodes(G, pos, nodelist=place_nodes, node_shape='o', node_color='lightgreen', node_size=3000, label="Places")
+dot = Digraph(comment='Petri Net Visualization')
+dot.attr(rankdir='LR')  # Left to Right layout
+dot.attr('node', fontsize='12')
+dot.attr('edge', fontsize='10')
 
-# Draw edges
-nx.draw_networkx_edges(G, pos, width=2, alpha=0.6, edge_color='black')
+# Add initial place
+dot.node('start', '', styles['initial_place'])
 
-# Draw node labels
-labels = {node: node for node in G.nodes}
-nx.draw_networkx_labels(G, pos, labels, font_size=10, font_weight='bold')
+# Add final place
+dot.node('end', '', styles['final_place'])
 
-# Add the legend
-plt.legend(loc='upper left', fontsize=10)
+# Add transitions
+for t in petri_net['transitions']:
+    """  DONT UNCOMMENT! The code blasts on labeling transitions  """ 
+    # t = activities[t]
+    dot.node(f"T_{t}", t, styles['transition'])
+    
+# Add places for each flow relation
+seen_places = set()
+for source, target in petri_net["flow_relations"]:
+    place_id = f"P_{source}_{target}"
+    if place_id not in seen_places:
+        dot.node(place_id, '', styles['place'])
+        seen_places.add(place_id)
 
-# Display the plot
-plt.title("Petri Net Representation")
-plt.axis('off')
-plt.show()
+# Add edges for initial transitions
+for t in petri_net['initial_markings']:
+    dot.edge('start', f"T_{t}")
+    
+# Add edges for final transitions
+for t in petri_net['final_markings']:
+    dot.edge(f"T_{t}", 'end')
+    
+# Add edges for flow relations
+for source, target in petri_net["flow_relations"]:
+    place_id = f"P_{source}_{target}"
+    dot.edge(f"T_{source}", place_id)
+    dot.edge(place_id, f"T_{target}")
+
+# Add a legend
+legend = Digraph('cluster_legend')
+legend.attr(label='Legend', labeljust='l')
+
+# Add legend items
+legend.node('L_trans', 'Activity', **styles['transition'])
+legend.node('L_place', 'Place', **styles['place'])
+legend.node('L_init', 'Start', **styles['initial_place'])
+legend.node('L_final', 'End', **styles['final_place'])
+
+# Arrange legend items vertically
+legend.attr(rankdir='TB')
+
+combined = Digraph()
+combined.attr(rankdir='LR')
+
+with combined.subgraph(name='cluster_main') as main:
+    main.attr(label='Process Model')
+    for line in dot.body:
+        main.body.append(line)
+
+with combined.subgraph(name='cluster_legend') as leg:
+    for line in legend.body:
+        leg.body.append(line)
+
+# Save with timestamp
+timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+output_filename = f"graph_{timestamp}"
+
+# Render in multiple formats
+combined.render(output_filename, format='png', cleanup=True)
+combined.render(output_filename, format='pdf', cleanup=True)
+
+print(f"Visualization saved as '{output_filename}.png' and '{output_filename}.pdf'")
+print("-" * 50)

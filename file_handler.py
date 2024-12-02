@@ -1,6 +1,5 @@
 import tkinter as tk
 from tkinter import filedialog
-from docx import Document
 import os
 
 # Function to read file content based on file type
@@ -12,9 +11,6 @@ def read_file_content(filepath):
     if ext == ".txt":
         with open(filepath, 'r') as file:
             content = file.read()
-    elif ext == ".docx":
-        doc = Document(filepath)
-        content = "\n".join([para.text for para in doc.paragraphs])
     elif ext == ".md":
         with open(filepath, 'r') as file:
             content = file.read()
